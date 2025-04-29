@@ -1,4 +1,4 @@
-﻿﻿using System;
+﻿using System;
 using LlamAcademy.ImpactSystem;
 using System.Collections;
 using UnityEngine;
@@ -10,11 +10,12 @@ using UnityEngine.Pool;
 [CreateAssetMenu(fileName = "Gun", menuName = "Guns/Gun", order = 0)]
 public class GunScriptableObject : ScriptableObject
 {
-    
+
     public ImpactType impactType;
     public GunType type;
     public string name;
     public GameObject modelPrefab;
+    public GameObject hitParticlePrefab;
     public Vector3 spawnPoint;
     public Vector3 spawnRotation;
 
@@ -30,9 +31,12 @@ public class GunScriptableObject : ScriptableObject
     private float stopShootingTime;
     private bool lastFrameWantedToShoot;
 
+    private PlayerMovement playerMovement;
     private ParticleSystem shootSystem; // ParticleSystem 是用來產生各種粒子效果的組件
     private ObjectPool<TrailRenderer> trailPool; //子彈飛行軌跡的物件池
+    private ObjectPool<GameObject> particlePool;
 
+    public int currentMagazineCapacity;
     /// <summary>
     /// 把槍模型實體化出來，掛在角色上
     /// </summary>
@@ -45,6 +49,8 @@ public class GunScriptableObject : ScriptableObject
 
         lastShootTime = 0;
         trailPool = new ObjectPool<TrailRenderer>(CreateTrail);
+        particlePool = new ObjectPool<GameObject>(CreateParticle);
+        currentMagazineCapacity = shootConfig.magazineCapacity;
 
         model = Instantiate(modelPrefab);
         model.transform.SetParent(parent, false); // false: 把模型的本地座標當成新相對位置
@@ -52,6 +58,7 @@ public class GunScriptableObject : ScriptableObject
         model.transform.localRotation = Quaternion.Euler(spawnRotation);
 
         shootSystem = model.GetComponentInChildren<ParticleSystem>();
+        playerMovement = model.GetComponentInParent<PlayerMovement>();
     }
 
     /// <summary>
@@ -79,16 +86,16 @@ public class GunScriptableObject : ScriptableObject
         }
 
         //Debug.Log("Shoot");
-        if (Time.time > shootConfig.FireRate + lastShootTime)
+        if (Time.time > shootConfig.FireRate + lastShootTime && currentMagazineCapacity != 0)
         {
             lastShootTime = Time.time;
             shootSystem.Play();
 
-            Vector3 spreadAmount = shootConfig.GetSpread(Time.time - initialClickTime);
-            model.transform.forward += model.transform.TransformDirection(spreadAmount);
+            //Vector3 spreadAmount = shootConfig.GetSpread(Time.time - initialClickTime);
+            //model.transform.forward += model.transform.TransformDirection(spreadAmount);
 
             Vector3 shootDirection = model.transform.forward;
-            
+
 
             if (Physics.Raycast(
                     shootSystem.transform.position,
@@ -106,8 +113,11 @@ public class GunScriptableObject : ScriptableObject
                         hit
                     )
                 );
+
+                currentMagazineCapacity--;
             }
-            else {
+            else
+            {
                 //Debug.Log("PlayTrail1");
                 activeMonoBehaviour.StartCoroutine(
                     PlayTrail(
@@ -116,9 +126,16 @@ public class GunScriptableObject : ScriptableObject
                         new RaycastHit()
                     )
                 );
+
+                currentMagazineCapacity--;
             }
 
         }
+    }
+
+    public void GunFinishReload()
+    {
+        currentMagazineCapacity = shootConfig.magazineCapacity;
     }
     /// <summary>
     /// Expected to be called every frame
@@ -127,18 +144,18 @@ public class GunScriptableObject : ScriptableObject
     public void Tick(bool wantedToShoot)
     {
         // 讓模型的 localRotation（本地角度）逐步逼近 spawnRotation
-        model.transform.localRotation = Quaternion.Lerp(
+        /*model.transform.localRotation = Quaternion.Lerp(
             model.transform.localRotation,
             Quaternion.Euler(spawnRotation),
             Time.deltaTime * shootConfig.recoilRecoverySpeed
-        );
+        );*/
 
-        if(wantedToShoot)
+        if (wantedToShoot)
         {
             lastFrameWantedToShoot = true;
             Shoot();
         }
-        else if(!wantedToShoot && lastFrameWantedToShoot)
+        else if (!wantedToShoot && lastFrameWantedToShoot)
         {
             stopShootingTime = Time.time;
             lastFrameWantedToShoot = false;
@@ -161,18 +178,23 @@ public class GunScriptableObject : ScriptableObject
     /// <returns></returns>
     private IEnumerator PlayTrail(Vector3 startPoint, Vector3 endPoint, RaycastHit hit)
     {
-        
+        float timeOffset = Time.deltaTime;
+        startPoint += playerMovement.currentSpeed * playerMovement.moveDirection.normalized * timeOffset;
+        endPoint += playerMovement.currentSpeed * playerMovement.moveDirection.normalized * timeOffset;
 
-        TrailRenderer instance = trailPool.Get(); 
+        //Debug.Log(playerMovement.currentSpeed);
+
+        TrailRenderer instance = trailPool.Get();
         instance.gameObject.SetActive(true);
         instance.transform.position = startPoint;
+
         yield return null; // 暫停一幀然後再繼續往下執行，避免 trail 被重複使用時，還殘留上一次的軌跡位置，導致拖尾瞬間拉出一條奇怪的線
 
         instance.emitting = true;
 
-        float distance = Vector3.Distance( startPoint, endPoint );
+        float distance = Vector3.Distance(startPoint, endPoint);
         float remainingDistance = distance;
-        while ( remainingDistance > 0 )
+        while (remainingDistance > 0)
         {
             instance.transform.position = Vector3.Lerp(
                 startPoint,
@@ -186,9 +208,9 @@ public class GunScriptableObject : ScriptableObject
 
         instance.transform.position = endPoint;
 
-        if(hit.collider != null)
+        if (hit.collider != null)
         {
-            Debug.Log($"Hit: {hit.collider.name}");
+            //Debug.Log($"Hit: {hit.collider.name}");
             /*SurfaceManager.Instance.HandleImpact(
                 hit.transform.gameObject,
                 endPoint,
@@ -196,10 +218,24 @@ public class GunScriptableObject : ScriptableObject
                 impactType,
                 0
             );*/
+            Transform current = hit.collider.transform;
+            IDamageable damageable = null;
 
-            if (hit.collider.TryGetComponent(out IDamageable damageable) )
+            while (current != null && damageable == null)
             {
-                Debug.Log("TakeDamage");
+                current.TryGetComponent<IDamageable>(out damageable);
+                current = current.parent;
+            }
+
+            if (damageable != null)
+            {
+                GameObject particleInstance = particlePool.Get();
+                particleInstance.gameObject.SetActive(true);
+                particleInstance.transform.position = hit.point;
+                ParticleSystem ps = particleInstance.GetComponent<ParticleSystem>();
+                activeMonoBehaviour.StartCoroutine(ReleaseAfterPlay(ps, particleInstance));
+
+                //Debug.Log("TakeDamage");
                 damageable.TakeDamage(damageConfig.getDamage(distance));
             }
         }
@@ -210,6 +246,8 @@ public class GunScriptableObject : ScriptableObject
         instance.emitting = false;
         instance.gameObject.SetActive(false);
         trailPool.Release(instance);
+
+
     }
 
     private TrailRenderer CreateTrail()
@@ -220,12 +258,29 @@ public class GunScriptableObject : ScriptableObject
         trail.colorGradient = trailConfig.Color; // 顏色變化（漸層）
         trail.material = trailConfig.material;
         trail.widthCurve = trailConfig.widthCurve; // 寬度變化
-        trail.time = trailConfig.duration; 
+        trail.time = trailConfig.duration;
         trail.minVertexDistance = trailConfig.minVertexDistance; // 每隔多遠加一個點，距離越小越平滑，但效能越差
 
         trail.emitting = false; // 預設不啟用發射（因為是用 Object Pool，要等真的射擊時才打開）
         trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; // 關掉陰影投射，可提升效能
 
         return trail;
+    }
+
+    private GameObject CreateParticle()
+    {
+        GameObject particleInstance = Instantiate(hitParticlePrefab);
+
+        return particleInstance;
+    }
+
+    private System.Collections.IEnumerator ReleaseAfterPlay(ParticleSystem ps, GameObject particleInstance)
+    {
+        ps.Play();
+
+        yield return new WaitForSeconds(ps.main.duration);
+
+        particleInstance.SetActive(false);
+        particlePool.Release(particleInstance);
     }
 }
