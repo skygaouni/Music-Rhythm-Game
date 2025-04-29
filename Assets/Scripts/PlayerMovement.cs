@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using static UnityEditor.Searcher.SearcherWindow.Alignment;
 
 public class PlayerMovement : MonoBehaviour
@@ -70,7 +71,7 @@ public class PlayerMovement : MonoBehaviour
     float horizontalInput;
     float verticalInput;
 
-    Vector3 moveDirection; // x軸與z軸的合方向
+    public Vector3 moveDirection; // x軸與z軸的合方向
 
     Rigidbody rb;
 
@@ -148,6 +149,11 @@ public class PlayerMovement : MonoBehaviour
 
     private void Myinput()
     {
+        if (Keyboard.current.rKey.isPressed)
+        {
+            animator.SetTrigger("Reloading");
+        }
+
         horizontalInput = Input.GetAxisRaw("Horizontal");// （A/D 或 ←/→）
         verticalInput = Input.GetAxisRaw("Vertical");// （W/S 或 ↑/↓）
         
@@ -342,7 +348,7 @@ public class PlayerMovement : MonoBehaviour
         // p.s. orientation 是物件的旋轉方向(面向)
         // quaternion 是物件的旋轉角度
         moveDirection = orientation.forward * verticalInput + orientation.right * horizontalInput;
-        Debug.Log(moveDirection);
+        //Debug.Log(moveDirection);
 
         if (OnSlope() && !exitingSlope)
         {
