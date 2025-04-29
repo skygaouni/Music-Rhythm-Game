@@ -25,6 +25,7 @@ public class GunScriptableObject : ScriptableObject
 
     private MonoBehaviour activeMonoBehaviour;
     private GameObject model;
+    private Animator animator;
 
     private float lastShootTime;
     private float initialClickTime;
@@ -59,6 +60,7 @@ public class GunScriptableObject : ScriptableObject
 
         shootSystem = model.GetComponentInChildren<ParticleSystem>();
         playerMovement = model.GetComponentInParent<PlayerMovement>();
+        animator = model.GetComponentInParent<Animator>();
     }
 
     /// <summary>
@@ -86,7 +88,7 @@ public class GunScriptableObject : ScriptableObject
         }
 
         //Debug.Log("Shoot");
-        if (Time.time > shootConfig.FireRate + lastShootTime && currentMagazineCapacity != 0)
+        if (Time.time > shootConfig.FireRate + lastShootTime && currentMagazineCapacity != 0 && !animator.GetBool("Reloading"))
         {
             lastShootTime = Time.time;
             shootSystem.Play();

@@ -9,7 +9,7 @@ public class PlayerMovement : MonoBehaviour
     //[Header("Player IK")]
     //public Transform upperbodyTarget; // 控制彎腰
     //public Transform upperbodyHint;
-    
+
 
     [Header("Movement")]
     public float moveSpeed; // 只管平面移動速度，不管y方向速度
@@ -67,6 +67,7 @@ public class PlayerMovement : MonoBehaviour
     public Transform orientation;
     public Transform camHolder;
     private Animator animator;
+    private PlayerGunSelector gunSelector;
 
     float horizontalInput;
     float verticalInput;
@@ -107,6 +108,7 @@ public class PlayerMovement : MonoBehaviour
     private void Start()
     {
         animator = GetComponentInChildren<Animator>();
+        gunSelector = GetComponent<PlayerGunSelector>();
 
         moveSpeed = walkSpeed;
         desiredMoveSpeed = walkSpeed;
@@ -135,7 +137,7 @@ public class PlayerMovement : MonoBehaviour
 
         if (grounded && !activeGrapple && !swinging)
             rb.drag = groundDrag;
-        else if(OnSlope())
+        else if (OnSlope())
             rb.drag = slopeDrag;
         else
             rb.drag = 0;
@@ -149,15 +151,22 @@ public class PlayerMovement : MonoBehaviour
 
     private void Myinput()
     {
-        if (Keyboard.current.rKey.isPressed)
+        if (Keyboard.current.rKey.isPressed &&
+            gunSelector.activeGun.currentMagazineCapacity != gunSelector.activeGun.shootConfig.magazineCapacity)
         {
-            animator.SetTrigger("Reloading");
+            int layerIndex = animator.GetLayerIndex("Gun Layer");
+            AnimatorStateInfo gunLayerStateInfo = animator.GetCurrentAnimatorStateInfo(layerIndex);
+
+            if (!gunLayerStateInfo.IsName("Reloading"))
+            {
+                animator.SetBool("Reloading", true);
+            }
         }
 
         horizontalInput = Input.GetAxisRaw("Horizontal");// （A/D 或 ←/→）
         verticalInput = Input.GetAxisRaw("Vertical");// （W/S 或 ↑/↓）
-        
-        if(grounded || OnSlope())
+
+        if (grounded || OnSlope())
         {
             // start jump
             if (Input.GetKey(jumpKey) && readyToJump)
@@ -201,7 +210,7 @@ public class PlayerMovement : MonoBehaviour
         {
             state = MovementState.unlimited;
             desiredMoveSpeed = 999f;
-            
+
         }
         else if (activeGrapple)
         {
@@ -218,12 +227,12 @@ public class PlayerMovement : MonoBehaviour
             state = MovementState.climbing;
             desiredMoveSpeed = climbSpeed;
         }
-        else if(wallrunning)
+        else if (wallrunning)
         {
             state = MovementState.wallrunning;
-            desiredMoveSpeed = wallrunSpeed ;
+            desiredMoveSpeed = wallrunSpeed;
         }
-        else if(grounded || OnSlope())
+        else if (grounded || OnSlope())
         {
             //mode - Sliding
             if (sliding)
@@ -245,7 +254,7 @@ public class PlayerMovement : MonoBehaviour
                 //Debug.Log("sliding");
             }
             // mode - Crouching 
-            else if (Input.GetKey(crouchKey))  
+            else if (Input.GetKey(crouchKey))
             {
                 state = MovementState.crouching;
                 desiredMoveSpeed = crouchSpeed;
@@ -263,7 +272,7 @@ public class PlayerMovement : MonoBehaviour
                 state = MovementState.walking;
 
                 desiredMoveSpeed = walkSpeed;
-                
+
             }
 
         }
@@ -278,10 +287,10 @@ public class PlayerMovement : MonoBehaviour
 
         bool desiredMoveSpeedHasChanged = desiredMoveSpeed != lastDesiredMoveSpeed;
 
-        if(desiredMoveSpeedHasChanged)
+        if (desiredMoveSpeedHasChanged)
         {
             // 只有從斜坡上滑下來的速度會慢慢遞減
-            if(keepMomentum)
+            if (keepMomentum)
             {
                 StopAllCoroutines();
                 StartCoroutine(SmoothlyLerpMoveSpeed());
@@ -294,12 +303,12 @@ public class PlayerMovement : MonoBehaviour
         lastDesiredMoveSpeed = desiredMoveSpeed;
 
         //deactivate keepMomentum
-        if(Mathf.Abs(desiredMoveSpeed - moveSpeed) < 0.1f) keepMomentum = false;
+        if (Mathf.Abs(desiredMoveSpeed - moveSpeed) < 0.1f) keepMomentum = false;
     }
 
     // smoothly lerp movementSpeed to desired value
     private IEnumerator SmoothlyLerpMoveSpeed()
-    {  
+    {
         float time = 0;
         float difference = Mathf.Abs(desiredMoveSpeed - moveSpeed);
         float startValue = moveSpeed;
@@ -314,19 +323,19 @@ public class PlayerMovement : MonoBehaviour
                 float slopeAngle = Vector3.Angle(Vector3.up, slopeHit.normal);
                 float slopeAngleIncrease = 1 + (slopeAngle / 90f);
 
-                if(speedIncreased)
+                if (speedIncreased)
                     time += Time.deltaTime * speedIncreasedMultiplier * slopeIncreasedMultiplier * slopeAngleIncrease;
                 else
                     time += Time.deltaTime * speedDecreasedMultiplier * slopeDecreasedMultiplier * slopeAngleIncrease;
             }
             else
             {
-                if(speedIncreased)
+                if (speedIncreased)
                     time += Time.deltaTime * speedIncreasedMultiplier;
                 else
                     time += Time.deltaTime * speedDecreasedMultiplier;
             }
-                
+
 
             yield return null;
         }
@@ -362,28 +371,28 @@ public class PlayerMovement : MonoBehaviour
                 Vector3 SlopeNormalForce = Vector3.Cross(moveDirection.normalized, slopeHit.normal).normalized;
                 rb.AddForce(SlopeNormalForce * 80f, ForceMode.Force);
             }
-                
+
         }
 
         // AddForce(施力的大小與方向, ForceMode.Force → 持續施加力，使角色逐漸加速)
-        else if(grounded) 
+        else if (grounded)
             rb.AddForce(moveDirection.normalized * moveSpeed * 10f, ForceMode.Force);
 
         else if (!grounded)
             rb.AddForce(moveDirection.normalized * moveSpeed * 10f * airMultiplier, ForceMode.Force);
-        
-            
 
-        if(!wallrunning)
+
+
+        if (!wallrunning)
             rb.useGravity = !OnSlope();
-        
+
     }
 
     private void SpeedControl()
     {
-        if(activeGrapple) return;
+        if (activeGrapple) return;
 
-        if(OnSlope() && !exitingSlope)
+        if (OnSlope() && !exitingSlope)
         {
             if (rb.velocity.magnitude > moveSpeed)
                 rb.velocity = rb.velocity.normalized * moveSpeed;
@@ -395,14 +404,14 @@ public class PlayerMovement : MonoBehaviour
             currentSpeed = flatVel.magnitude;
 
             // limit velocity if needed (不會一直衝刺)
-            if(flatVel.magnitude > moveSpeed)
+            if (flatVel.magnitude > moveSpeed)
             {
                 //Debug.Log("11");
                 Vector3 limitedVel = flatVel.normalized * moveSpeed;
-                rb.velocity = new Vector3(limitedVel.x, rb.velocity.y, limitedVel.z);    
+                rb.velocity = new Vector3(limitedVel.x, rb.velocity.y, limitedVel.z);
             }
         }
-            
+
     }
 
     private void Jump()
@@ -461,7 +470,7 @@ public class PlayerMovement : MonoBehaviour
     private void OnCollisionEnter(Collision collision)
     {
         //Debug.Log("OnCollisionEnter");
-        if(enableMovementOnNextTouch)
+        if (enableMovementOnNextTouch)
         {
             enableMovementOnNextTouch = false;
             ResetRestrictions();
@@ -473,7 +482,7 @@ public class PlayerMovement : MonoBehaviour
     public bool OnSlope()
     {
         // slopeHit為坡面的法線向量
-        if(Physics.Raycast(transform.position, Vector3.down, out slopeHit, playerHeight * 0.5f + 0.3f))
+        if (Physics.Raycast(transform.position, Vector3.down, out slopeHit, playerHeight * 0.5f + 0.3f))
         {
             float angle = Vector3.Angle(Vector3.up, slopeHit.normal);
             //grounded = true;
@@ -487,7 +496,7 @@ public class PlayerMovement : MonoBehaviour
 
     // 將moveDirection透過ProjectOnPlane投影到slopeHit.normal -> moveDirection 垂直於 slopeHit
     public Vector3 GetSlopeMoveDirection(Vector3 direction)
-    {   
+    {
         return Vector3.ProjectOnPlane(direction, slopeHit.normal).normalized;
     }
 
@@ -496,7 +505,7 @@ public class PlayerMovement : MonoBehaviour
     public Vector3 CalculateJumpVelocity(Vector3 startPoint, Vector3 endPoint, float trajectoryHeight)
     {
         float gravity = Physics.gravity.y;
-        float displacementY = endPoint.y - startPoint.y; 
+        float displacementY = endPoint.y - startPoint.y;
         Vector3 displacementXZ = new Vector3(endPoint.x - startPoint.x, 0f, endPoint.z - startPoint.z);
 
         //從起點(這裡定起點為地面)向上跳到拋物線最高點所需的初速（Y 軸方向）
