@@ -8,6 +8,7 @@ public class PlayerPainResponse : MonoBehaviour
     [Header("Health")]
     [SerializeField]
     private PlayerHealth health;
+    private bool hurtable;
 
     [SerializeField]
     [Range(1, 100)]
@@ -41,13 +42,17 @@ public class PlayerPainResponse : MonoBehaviour
         // 判斷這個部位是否屬於會造成傷害的層
         if ((damageSourceLayers.value & (1 << hitPart.layer)) != 0)
         {
-            Debug.Log("受到攻擊");
-
-            pm.freeze = true;
+            //Debug.Log("受到攻擊");
 
             EnemyMovement enemy = hitPart.GetComponentInParent<EnemyMovement>();
 
-            health.TakeDamage(enemy.damageDealer);
+            if (!hurtable)
+            {
+                Debug.Log("TakeDamage");
+                hurtable = true;
+                health.TakeDamage(enemy.damageDealer);
+            }
+
 
             Vector3 knockbackDirection = player.transform.position - collision.GetContact(0).point;
             knockbackDirection.y = 0f;
@@ -55,11 +60,7 @@ public class PlayerPainResponse : MonoBehaviour
 
             StartCoroutine(KnockbackForceOverTime(knockbackDirection, knockbackForce, 0.5f));
 
-            pm.freeze = false;
-        }
-        else
-        {
-            pm.freeze = false;
+
         }
     }
 
@@ -95,7 +96,6 @@ public class PlayerPainResponse : MonoBehaviour
 
     private IEnumerator KnockbackForceOverTime(Vector3 direction, float force, float duration)
     {
-        Debug.Log("Add force");
         float timer = 0f;
 
         while (timer < duration)
@@ -105,5 +105,6 @@ public class PlayerPainResponse : MonoBehaviour
             yield return new WaitForFixedUpdate();
         }
 
+        hurtable = false;
     }
 }
