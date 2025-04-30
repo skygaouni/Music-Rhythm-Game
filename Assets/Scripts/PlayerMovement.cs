@@ -195,6 +195,7 @@ public class PlayerMovement : MonoBehaviour
     bool keepMomentum;
     private void StateHandler()
     {
+
         // mode - jumping
         if (!readyToJump) ResetJump();
 
@@ -438,6 +439,7 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
+    // 在下一次碰撞時啟用移動」的旗標（開關）
     private bool enableMovementOnNextTouch;
     private Vector3 velocityToSet;
     public void jumpToPosition(Vector3 targetPosition, float trajectoryHeight)
@@ -527,6 +529,11 @@ public class PlayerMovement : MonoBehaviour
 
         animator.SetFloat("xVelocity", xVelocity, .1f, Time.deltaTime);
         animator.SetFloat("zVelocity", zVelocity, .1f, Time.deltaTime);
+    }
+
+    public void StopMoving()
+    {
+        StopAllCoroutines();
     }
 }
 

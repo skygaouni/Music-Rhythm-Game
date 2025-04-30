@@ -7,8 +7,11 @@ public class EnemyMovement : MonoBehaviour
 {
     [SerializeField]
     private NavMeshAgent agent;
+
     [SerializeField]
     private float StillDelay = 1f;
+
+    public int damageDealer;
 
     private void Awake()
     {
